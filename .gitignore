@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.mypy_cache/
+
+# 데이터베이스 파일
+*.db
+*.sqlite
+*.sqlite3
+
+# 미러링된 사이트 데이터 (용량이 클 수 있음)
+www.*/
+kr.gundam.info/
+en.gundam.info/
+manual.bandai-hobby.net/
+
+# 생성된 JSON 파일들 (큰 파일들)
+*_products.json
+*_reference.json
+dalong_products.json
+bnkrmall_products.json
+gundaminfo_products.json
+bandai-hobby_products.json
+
+# 임시 파일들
+*_test.*
+*_new.*
+*.tmp
+*.temp
+
+# 백업 파일들
+*.backup*
+*.bak
+*.250*
+
+# 로그 파일들
+*.log
+
+# 기타 임시 디렉토리
+test_detail/
+.claude/
+
+# IDE/에디터 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS 관련
+.DS_Store
+Thumbs.db 
