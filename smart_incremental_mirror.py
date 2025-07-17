@@ -226,10 +226,10 @@ class SmartIncrementalMirror:
         """최적화된 requests 세션 생성"""
         session = requests.Session()
         
-        # 재시도 전략
+        # 재시도 전략 - 더 빠른 재시도
         retry_strategy = Retry(
-            total=2,
-            backoff_factor=2,
+            total=1,  # 재시도 횟수 줄임
+            backoff_factor=1,  # 백오프 시간 단축
             status_forcelist=[429, 500, 502, 503, 504],
         )
         
@@ -294,7 +294,7 @@ class SmartIncrementalMirror:
     def check_if_update_needed(self, url: str) -> tuple[bool, Dict[str, str]]:
         """HEAD 요청으로 업데이트 필요 여부 확인"""
         try:
-            response = self.session.head(url, timeout=30)
+            response = self.session.head(url, timeout=15)  # 타임아웃 단축
             if response.status_code == 200:
                 headers = {
                     'etag': response.headers.get('etag', ''),
@@ -331,13 +331,13 @@ class SmartIncrementalMirror:
         
         if not needs_update:
             self.skipped_count += 1
-            if self.skipped_count % 100 == 0:
+            if self.skipped_count % 50 == 0:  # 더 자주 진행상황 출력
                 logger.info(f"건너뛴 파일: {self.skipped_count}개")
             return False
         
         try:
             # 실제 다운로드
-            response = self.session.get(normalized_url, timeout=60)
+            response = self.session.get(normalized_url, timeout=30)  # 타임아웃 단축
             response.raise_for_status()
             
             # 파일 저장
@@ -370,7 +370,7 @@ class SmartIncrementalMirror:
             )
             
             self.downloaded_count += 1
-            if self.downloaded_count % 50 == 0:
+            if self.downloaded_count % 20 == 0:  # 더 자주 진행상황 출력
                 logger.info(f"다운로드: {self.downloaded_count}개, 건너뛰기: {self.skipped_count}개")
             
             return True
@@ -546,8 +546,11 @@ class SmartIncrementalMirror:
                           f"오류: {self.error_count}, "
                           f"속도: {rate:.1f} urls/sec")
             
-            # 요청 간격 (서버 부하 방지)
-            time.sleep(2.0)  # 2초 대기
+            # 요청 간격 (서버 부하 방지) - 동적 대기 시간
+            if success:
+                time.sleep(0.3)  # 성공 시 짧은 대기
+            else:
+                time.sleep(1.0)  # 실패 시 긴 대기
         
         # 최종 통계
         elapsed = time.time() - start_time

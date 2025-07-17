@@ -7,26 +7,26 @@ echo "건프라 사이트 데이터 수집 시작..."
 # BNKR Mall 데이터 수집
 echo
 echo "=== BNKR Mall 데이터 추출 ==="
-./mirror_site.sh bnkrmall -e
+./mirror_site.sh bnkrmall -e 2>&1 | grep -v INFO
 
 # Gundaminfo 데이터 수집
 echo
 echo "=== Gundaminfo 데이터 추출 ==="
-./mirror_site.sh gundaminfo -c -e
+./mirror_site.sh gundaminfo -c -e 2>&1 | grep -v INFO
 
 # Dalong.net 데이터 수집  
 echo
 echo "=== Dalong.net 데이터 수집 ==="
-./mirror_site.sh dalong -c -e
+./mirror_site.sh dalong -c -e 2>&1 | grep -v INFO
 
 # Bandai Manual 데이터 수집
 echo
 echo "=== Bandai Manual 데이터 수집 ==="
-./mirror_site.sh bandai-hobby -c -e
+./mirror_site.sh bandai-hobby -c -e 2>&1 | grep -v INFO
 
 echo
 echo "=== 번역 참고 자료 추출 ==="
-cat instruction.md | ~/.claude/local/claude --dangerously-skip-permissions -p --file bnkrmall_products.json --file gundaminfo_products.json --file dalong_products.json
+cat instruction.md | ~/.claude/local/claude --dangerously-skip-permissions -p
 
 echo
 echo "=== Bandai Manual 결과 조회 및 HTML 저장 ==="
