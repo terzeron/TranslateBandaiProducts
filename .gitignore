@@ -43,6 +43,9 @@ translation_errors.json
 test_detail/
 .claude/
 
+# mapping
+mapping/
+
 # IDE/에디터 설정
 .vscode/
 .idea/
