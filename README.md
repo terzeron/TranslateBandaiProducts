@@ -96,8 +96,8 @@ python3 extract_site_products.py <site_directory> <output_file> <site_name>
 ## 데이터 파일
 
 ### 번역 매핑 파일
-- `bandai_product_ja_ko_mapping.json`: 일본어-한국어 번역 매핑 데이터
-- `bandai_product_ja_ko_mapping.json.*`: 백업 버전들
+- `mapping/bandai_product_ja_ko_mapping.json`: 일본어-한국어 번역 매핑 데이터
+- `mapping/bandai_product_ja_ko_mapping.json.*`: 백업 버전들
 
 ### 제품 데이터베이스
 - `bnkrmall_products.json`: BNKR Mall 제품 정보

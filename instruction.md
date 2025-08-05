@@ -7,7 +7,8 @@
 
 ## 목표
 convert_bandai_product_ja2ko.py 실행 시 translating error가 발생하는 일본어 상품명을 한국어로 번역
-실행할 명령: `./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf bandai_product_ja_ko_mapping.json`
+실행할 명령: `./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf mapping/bandai_product_ja_ko_mapping.json`
+위 명령의 결과에서 translating error가 발생하는 항목을 모두 출력할 것
 
 ## 작업 순서 (반드시 이 순서로 진행)
 
@@ -19,7 +20,7 @@ convert_bandai_product_ja2ko.py 실행 시 translating error가 발생하는 일
 
 ### 2단계: 결과 확인
 각 도구 실행 후:
-- `./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf bandai_product_ja_ko_mapping.json` 실행
+- `./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf mapping/bandai_product_ja_ko_mapping.json` 실행
 - 남은 오류 개수 확인
 - 진행 상황 보고
 
@@ -31,8 +32,8 @@ convert_bandai_product_ja2ko.py 실행 시 translating error가 발생하는 일
 - 대체 표기가 있을 경우 괄호 병기 (예: 스트라이크 루즈(루지) B팩)
 
 ## 출력 요구사항
-- bandai_product_ja_ko_mapping.json에 추가 (기존 항목 수정 금지)
-- 백업 파일 생성: bandai_product_ja_ko_mapping.json.YYMMDD
+- mapping/bandai_product_ja_ko_mapping.json에 추가 (기존 항목 수정 금지)
+- 백업 파일 생성: mapping/bandai_product_ja_ko_mapping.json.YYMMDD
 - 간단한 처리 결과 보고. 특히 신규 번역된 항목 모두 나열할 것
 
 ## 금지 사항

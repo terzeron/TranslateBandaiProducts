@@ -7,28 +7,29 @@ echo "건프라 사이트 데이터 수집 시작..."
 # BNKR Mall 데이터 수집
 echo
 echo "=== BNKR Mall 데이터 추출 ==="
-./mirror_site.sh bnkrmall -e 2>&1 | grep -v INFO
+./mirror_site.sh bnkrmall -e > bnkrmall.log 2>&1
 
 # Gundaminfo 데이터 수집
 echo
 echo "=== Gundaminfo 데이터 추출 ==="
-./mirror_site.sh gundaminfo -c -e 2>&1 | grep -v INFO
+./mirror_site.sh gundaminfo -c -e > gundaminfo.log 2>&1 
 
 # Dalong.net 데이터 수집  
 echo
 echo "=== Dalong.net 데이터 수집 ==="
-./mirror_site.sh dalong -c -e 2>&1 | grep -v INFO
+./mirror_site.sh dalong -c -e > dalong.log 2>&1
 
 # Bandai Manual 데이터 수집
 echo
 echo "=== Bandai Manual 데이터 수집 ==="
-./mirror_site.sh bandai-hobby -c -e 2>&1 | grep -v INFO
+./mirror_site.sh bandai-hobby -c -e > bandai-hobby.log 2>&1
 
-echo
-echo "=== 번역 참고 자료 추출 ==="
-cat instruction.md | ~/.claude/local/claude --dangerously-skip-permissions -p
+#echo
+#echo "=== 번역 참고 자료 추출 ==="
+#python gemini_agent.py < instruction.md
+~/.claude/local/claude -p < instruction.md
 
 echo
 echo "=== Bandai Manual 결과 조회 및 HTML 저장 ==="
-./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf bandai_product_ja_ko_mapping.json
-./convert_bandai_product_ja2ko.py -h manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf bandai_product_ja_ko_mapping.json > ~/public_html/xml/bandai.html
+./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf mapping/bandai_product_ja_ko_mapping.json
+./convert_bandai_product_ja2ko.py -h manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf mapping/bandai_product_ja_ko_mapping.json > ~/public_html/xml/bandai.html
