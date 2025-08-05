@@ -141,7 +141,7 @@ def main() -> int:
 
     translation_data = read_translation(translation_file_path)
     if not translation_data:
-        sys.stderr(f"can't find translation data from '{translation_file_path}'")
+        sys.stderr.write(f"can't find translation data from '{translation_file_path}'\n")
     
     # 조악한 번역 방지를 위해 TranslationOptimizer 비활성화
     optimizer = None
@@ -168,7 +168,7 @@ def main() -> int:
                 link = pdf_dir_path / (full_korean_name + ".pdf")
                 target = pdf_dir_path / (product_number + ".pdf")
 
-                deduplicated_link = process_duplicates(product_name_number_dict, product_number, full_korean_name, year, pdf_dir_path)
+                deduplicated_link = process_duplicates(product_name_number_dict, int(product_number), full_korean_name, year, pdf_dir_path)
                 if deduplicated_link:
                     link = deduplicated_link
                 
