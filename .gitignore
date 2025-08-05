@@ -37,7 +37,8 @@ bandai-hobby_products.json
 
 # 로그 파일들
 *.log
-
+*.txt
+translation_errors.json
 # 기타 임시 디렉토리
 test_detail/
 .claude/
