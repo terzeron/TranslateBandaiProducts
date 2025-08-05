@@ -27,7 +27,7 @@ echo "=== Bandai Manual 데이터 수집 ==="
 #echo
 #echo "=== 번역 참고 자료 추출 ==="
 #python gemini_agent.py < instruction.md
-(cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error") | ~/.claude/local/claude -p
+(cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | ~/.claude/local/claude -p
 
 echo
 echo "=== Bandai Manual 결과 조회 및 HTML 저장 ==="

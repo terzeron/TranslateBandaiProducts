@@ -34,6 +34,11 @@ def convert_full_character_to_half(text: str) -> str:
     return unicodedata.normalize('NFKC', text)
 
 
+def clean_text(text: str) -> str:
+    text = re.sub(r'[“”"]', '\'', text)
+    return convert_full_character_to_half(text)
+
+
 def get_product_name_from_file(file_path: Path) -> tuple[str, str, str, str]:
     product_name = ""
     brand = ""
@@ -56,7 +61,7 @@ def get_product_name_from_file(file_path: Path) -> tuple[str, str, str, str]:
             m = re.search(r'<h2 class="el_title"><span>(?P<brand>SDW HEROES|Figure-rise Standard|SDガンダム EX|SDガンダム|SDBD:R|SDBF|SDBD|ADVANCE OF Z|BB戦士|HGBF|HGBC|FULL MECHANICS|HGBD:R|HGBD|HGFC|ENTRY GRADE|RE/100|HGAC|HGCE|EXPO|MGSD|HGCC|HGAW|HGUC|MGEX|RG|MG|PG|HG).*(?P<scale>1/\d{1,4})[ \u3000\xa0\s]*(?P<product_name>.+)</span></h2>', line)
             if m:
                 brand = m.group("brand")
-                brand = convert_full_character_to_half(brand)
+                brand = clean_text(brand)
                 brand = re.sub(r"RE/100", "RE100", brand)
                 scale = m.group("scale")
                 scale = re.sub(r"/", "_", scale)
@@ -67,7 +72,7 @@ def get_product_name_from_file(file_path: Path) -> tuple[str, str, str, str]:
             m = re.search(r'<h2 class="el_title"><span>(?P<brand>SDW HEROES|Figure-rise Standard|SDガンダム EX|SDガンダム|SDBD:R|SDBF|SDBD|ADVANCE OF Z|BB戦士|HGBF|HGBC|FULL MECHANICS|HGBD:R|HGBD|HGFC|ENTRY GRADE|RE/100|HGAC|HGCE|EXPO|MGSD|HGCC|HGAW|HGUC|MGEX|RG|MG|PG|HG)[ \u3000\xa0\s]*(?P<product_name>.+)</span></h2>', line)
             if m:
                 brand = m.group("brand")
-                brand = convert_full_character_to_half(brand)
+                brand = clean_text(brand)
                 brand = re.sub(r"RE/100", "RE100", brand)
                 scale = ""
                 product_name = m.group("product_name")
@@ -96,9 +101,8 @@ def convert_ja_to_ko(translation_data: dict[str, str], product_name: str, brand:
     상태: "success", "empty", "not_found"
     """
     # cleaning
-    product_name = re.sub(r'["""]', '', product_name)
-    product_name = convert_full_character_to_half(product_name)
-    brand = convert_full_character_to_half(brand)
+    product_name = clean_text(product_name)
+    brand = clean_text(brand)
 
     # 각 키를 순차적으로 시도하고 사용된 키를 기록
     key = product_name + " " + brand + " " + scale
@@ -276,7 +280,7 @@ def main() -> int:
         product_number = m.group("product_number")
         valid_product_number_files += 1
         product_name, brand, scale, year = get_product_name_from_file(file_path)
-        #print(f"{product_number}: {product_name}, {brand}, {scale}, {year}")
+        #print(f"{product_name} / {brand} / {scale} / {product_number}")
         
         if product_name:
             product_name_extracted += 1
@@ -315,10 +319,10 @@ def main() -> int:
                     symlink_creation_failed += 1
             elif status == "empty":
                 translation_empty += 1
-                print(f"translating error: {brand} / {product_name} / {product_number}")
+                print(f"translating error: {product_name} / {brand} / {scale} / {product_number}")
             else:  # status == "not_found"
                 translation_not_found += 1
-                print(f"translating error: {brand} / {product_name} / {product_number}")
+                print(f"translating error: {product_name} / {brand} / {scale} / {product_number}")
         else:
             print(f"can't get product name from web page, {file_path=}")
 
@@ -371,14 +375,15 @@ def main() -> int:
     print(f"translating error 출력 예상: {translation_empty + translation_not_found}개")
     
     # 중복 심볼릭링크 상세 정보 출력
-    if multiple_symlinks:
-        print(f"\n=== 중복 심볼릭링크 상세 정보 ===")
-        for target, links in sorted(multiple_symlinks.items()):
-            print(f"{target} <- {len(links)}개:")
-            for link in sorted(links):
-                print(f"  - {link}")
+    #if multiple_symlinks:
+    #    print(f"\n=== 중복 심볼릭링크 상세 정보 ===")
+    #    for target, links in sorted(multiple_symlinks.items()):
+    #        print(f"{target} <- {len(links)}개:")
+    #        for link in sorted(links):
+    #            print(f"  - {link}")
     
     # 사용되지 않은 번역 아이템들 처리
+    return 0
     unused_keys = set(translation_data.keys()) - used_translation_keys
     if unused_keys:
         print(f"\n사용되지 않은 번역 아이템들 ({len(unused_keys)}개):")
