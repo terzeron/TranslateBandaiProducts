@@ -6,9 +6,7 @@
 - **단계별로 효율적으로 진행할 것**
 
 ## 목표
-convert_bandai_product_ja2ko.py 실행 시 translating error가 발생하는 일본어 상품명을 한국어로 번역
-실행할 명령: `./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf mapping/bandai_product_ja_ko_mapping.json`
-위 명령의 결과에서 translating error가 발생하는 항목을 모두 출력할 것
+다음 translating error가 발생하는 일본어 상품명을 한국어로 번역
 
 ## 작업 순서 (반드시 이 순서로 진행)
 
@@ -19,16 +17,14 @@ convert_bandai_product_ja2ko.py 실행 시 translating error가 발생하는 일
 * gundaminfo_products.json
 
 ### 2단계: 결과 확인
-각 도구 실행 후:
-- `./convert_bandai_product_ja2ko.py manual.bandai-hobby.net/menus/detail manual.bandai-hobby.net/pdf mapping/bandai_product_ja_ko_mapping.json` 실행
-- 남은 오류 개수 확인
+- 비번역 개수 확인
 - 진행 상황 보고
 
 ## 번역 규칙
 - 브랜드명: HG, RG, MG, PG, RE/100 등 그대로 유지
 - 스케일: 1/144, 1/100 등 그대로 유지
 - 기체명: 한국 건프라 커뮤니티 통용 표기 우선
-- 히라가나, 카타카나 완전 제거
+- 히라가나, 카타카나, 따옴표 완전 제거
 - 대체 표기가 있을 경우 괄호 병기 (예: 스트라이크 루즈(루지) B팩)
 
 ## 출력 요구사항
