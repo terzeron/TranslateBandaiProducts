@@ -156,18 +156,6 @@ class SiteConfig:
     def get_config(site_name: str) -> Dict:
         """사이트별 설정 반환"""
         configs = {
-            'bnkrmall': {
-                'priority_patterns': [
-                    (r'goods/category\.do.*gunpla', 3),
-                    (r'main/(gunpla|figure)_index\.do', 3),
-                    (r'page=[1-5]', 2),
-                    (r'page=([6-9]|1[0-5])', 1),
-                    (r'brandIdx=', 2),
-                ],
-                'link_keywords': ['gunpla', 'figure', 'category', 'goods', 'main', 'index', 'page='],
-                'file_extensions': ['.html'],
-                'max_depth': 5
-            },
             'dalong': {
                 'priority_patterns': [
                     (r'/photo/.*\.htm', 3),  # 사진 페이지 우선
@@ -203,12 +191,12 @@ class SiteConfig:
             }
         }
         
-        return configs.get(site_name, configs['bnkrmall'])  # 기본값은 bnkrmall
+        return configs.get(site_name, {})  
 
 class SmartIncrementalMirror:
     """스마트 증분 미러링 시스템"""
     
-    def __init__(self, base_url: str, output_dir: str, site_name: str = 'bnkrmall'):
+    def __init__(self, base_url: str, output_dir: str, site_name: str):
         self.base_url = base_url.rstrip('/')
         self.output_dir = Path(output_dir)
         self.site_name = site_name
@@ -399,11 +387,92 @@ class SmartIncrementalMirror:
         
         return links
 
+    def save_korean_keywords(self, url: str, keywords: Set[str]):
+        """한글 키워드를 파일로 저장"""
+        if not keywords:
+            return
+            
+        keywords_file = self.output_dir / "korean_keywords.txt"
+        with open(keywords_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n=== {url} ===\n")
+            f.write(f"키워드 수: {len(keywords)}\n")
+            f.write(f"키워드: {', '.join(sorted(keywords))}\n")
+            f.write("-" * 50 + "\n")
+
+    def extract_korean_keywords(self, content: str) -> Set[str]:
+        """HTML 내용에서 한글 키워드 추출 (개선된 버전)"""
+        korean_keywords = set()
+        
+        # 한글 패턴 (단어 단위)
+        korean_word_pattern = re.compile(r'[가-힣]{2,}')
+        
+        # 1. title 태그에서 한글 추출
+        title_pattern = re.compile(r'<title[^>]*>(.*?)</title>', re.IGNORECASE | re.DOTALL)
+        title_matches = title_pattern.findall(content)
+        for title in title_matches:
+            # HTML 엔티티 디코딩
+            title_clean = re.sub(r'&[^;]+;', ' ', title)
+            title_clean = re.sub(r'<[^>]+>', ' ', title_clean)
+            for match in korean_word_pattern.finditer(title_clean):
+                word = match.group().strip()
+                if len(word) >= 2:
+                    korean_keywords.add(word)
+        
+        # 2. 링크 텍스트에서 한글 추출
+        link_text_pattern = re.compile(r'<a[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+        link_matches = link_text_pattern.findall(content)
+        for link_text in link_matches:
+            # HTML 태그 제거
+            link_clean = re.sub(r'<[^>]+>', ' ', link_text)
+            link_clean = re.sub(r'&[^;]+;', ' ', link_clean)
+            for match in korean_word_pattern.finditer(link_clean):
+                word = match.group().strip()
+                if len(word) >= 2:
+                    korean_keywords.add(word)
+        
+        # 3. 메타 태그에서 한글 추출 (keywords, description)
+        meta_patterns = [
+            r'<meta[^>]*name=["\']keywords["\'][^>]*content=["\']([^"\']+)["\']',
+            r'<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\']+)["\']',
+            r'<meta[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\']+)["\']',
+            r'<meta[^>]*property=["\']og:description["\'][^>]*content=["\']([^"\']+)["\']'
+        ]
+        
+        for pattern in meta_patterns:
+            meta_matches = re.findall(pattern, content, re.IGNORECASE)
+            for meta_content in meta_matches:
+                meta_clean = re.sub(r'&[^;]+;', ' ', meta_content)
+                for match in korean_word_pattern.finditer(meta_clean):
+                    word = match.group().strip()
+                    if len(word) >= 2:
+                        korean_keywords.add(word)
+        
+        # 4. h1, h2, h3 태그에서 한글 추출
+        heading_pattern = re.compile(r'<h[1-6][^>]*>(.*?)</h[1-6]>', re.IGNORECASE | re.DOTALL)
+        heading_matches = heading_pattern.findall(content)
+        for heading in heading_matches:
+            heading_clean = re.sub(r'<[^>]+>', ' ', heading)
+            heading_clean = re.sub(r'&[^;]+;', ' ', heading_clean)
+            for match in korean_word_pattern.finditer(heading_clean):
+                word = match.group().strip()
+                if len(word) >= 2:
+                    korean_keywords.add(word)
+        
+        # 5. 일반 텍스트에서 한글 추출 (HTML 태그 제거 후)
+        content_clean = re.sub(r'<[^>]+>', ' ', content)
+        content_clean = re.sub(r'&[^;]+;', ' ', content_clean)
+        content_clean = re.sub(r'\s+', ' ', content_clean)  # 연속된 공백 제거
+        
+        for match in korean_word_pattern.finditer(content_clean):
+            word = match.group().strip()
+            if len(word) >= 2:
+                korean_keywords.add(word)
+        
+        return korean_keywords
+
     def get_initial_urls(self) -> List[str]:
         """사이트별 초기 URL 목록"""
-        if self.site_name == 'bnkrmall':
-            return self._get_bnkrmall_urls()
-        elif self.site_name == 'dalong':
+        if self.site_name == 'dalong':
             return self._get_dalong_urls()
         elif self.site_name == 'bandai-hobby':
             return self._get_bandai_urls()
@@ -411,45 +480,6 @@ class SmartIncrementalMirror:
             return self._get_gundaminfo_urls()
         else:
             return [self.base_url]
-
-    def _get_bnkrmall_urls(self) -> List[str]:
-        """BNKR Mall 초기 URL 목록"""
-        base_domain = self.base_url.replace('/main/index.do', '')
-        
-        # 높은 우선순위 URLs
-        high_priority = [
-            f"{base_domain}/main/index.do",
-            f"{base_domain}/main/gunpla_index.do",
-            f"{base_domain}/main/figure_index.do",
-        ]
-        
-        # 건프라 카테고리 페이지들
-        category_base = f"{base_domain}/goods/category.do?cate=1576&cateName=건프라&endGoods=Y"
-        medium_priority = [
-            category_base,
-            f"{category_base}&psort=BEST_SELLING_DESC",
-            f"{category_base}&psort=NEW_GOODS_DESC",
-        ]
-        
-        # 브랜드별 페이지들
-        brand_ids = [175, 193, 180, 403, 181, 182, 183, 184, 185]
-        for brand_id in brand_ids:
-            medium_priority.append(f"{category_base}&brandIdx={brand_id}")
-        
-        # 페이지네이션 (처음 20페이지만)
-        low_priority = []
-        for page in range(1, 21):
-            low_priority.append(f"{category_base}&page={page}")
-        
-        # 우선순위별로 정렬된 URL 목록 생성
-        all_urls = [(url, 3) for url in high_priority] + \
-                   [(url, 2) for url in medium_priority] + \
-                   [(url, 1) for url in low_priority]
-        
-        # 우선순위별로 정렬
-        all_urls.sort(key=lambda x: x[1], reverse=True)
-        
-        return [url for url, priority in all_urls]
 
     def _get_dalong_urls(self) -> List[str]:
         """Dalong.net 초기 URL 목록"""
@@ -516,6 +546,13 @@ class SmartIncrementalMirror:
                         
                         new_links = self.extract_links(content, current_url)
                         
+                        # 한글 키워드 추출 (gundaminfo 사이트의 경우)
+                        if self.site_name == 'gundaminfo':
+                            korean_keywords = self.extract_korean_keywords(content)
+                            if korean_keywords:
+                                logger.info(f"한글 키워드 추출: {len(korean_keywords)}개 - {list(korean_keywords)[:10]}")
+                                self.save_korean_keywords(current_url, korean_keywords) # 키워드 저장
+                        
                         # 우선순위 기반으로 새 링크 삽입
                         for link in new_links:
                             if link not in visited_urls and link not in urls_to_visit:
@@ -554,6 +591,16 @@ class SmartIncrementalMirror:
         
         # 최종 통계
         elapsed = time.time() - start_time
+        
+        # 한글 키워드 통계 (gundaminfo 사이트의 경우)
+        if self.site_name == 'gundaminfo':
+            keywords_file = self.output_dir / "korean_keywords.txt"
+            if keywords_file.exists():
+                with open(keywords_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    korean_word_count = len(re.findall(r'[가-힣]{2,}', content))
+                    logger.info(f"총 추출된 한글 단어 수: {korean_word_count}개")
+        
         logger.info(f"\n=== 미러링 완료 ===")
         logger.info(f"총 처리 URL: {processed_count}")
         logger.info(f"새로 다운로드: {self.downloaded_count}")
@@ -567,14 +614,13 @@ def main():
     """메인 함수"""
     if len(sys.argv) < 3:
         print("Usage: python3 smart_incremental_mirror.py <base_url> <output_dir> [max_pages] [site_name]")
-        print("  site_name: bnkrmall, dalong, bandai-hobby, gundaminfo (default: bnkrmall)")
+        print("  site_name: dalong, bandai-hobby, gundaminfo")
         sys.exit(1)
     
     base_url = sys.argv[1]
     output_dir = sys.argv[2]
     max_pages = int(sys.argv[3]) if len(sys.argv) > 3 else 1000
-    site_name = sys.argv[4] if len(sys.argv) > 4 else 'bnkrmall'
-    
+    site_name = sys.argv[4]
     # 미러링 시스템 초기화
     mirror = SmartIncrementalMirror(base_url, output_dir, site_name)
     

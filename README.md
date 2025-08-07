@@ -4,7 +4,7 @@
 다양한 건프라 관련 사이트에서 제품 정보를 수집하고, 일본어 제품명을 한국어로 번역하여 한국 사용자들에게 보다 접근하기 쉬운 형태로 제공하는 시스템입니다.
 
 ## 주요 기능
-- 다중 사이트 미러링 (BNKR Mall, Dalong.net, Bandai Manual, Gundam Info)
+- 다중 사이트 미러링 (Dalong.net, Bandai Manual, Gundam Info)
 - **통합 스마트 미러링**으로 모든 사이트에서 일관된 최적화
 - 사이트별 특화된 우선순위 수집 및 키워드 필터링
 - 머신러닝 기반 번역 최적화
@@ -24,7 +24,6 @@
 - **SQLite 기반 격리 관리**: 사이트별 메타데이터 데이터베이스
 
 **사이트별 최적화 설정:**
-- **BNKR Mall**: 동적 페이지네이션 + 건프라 카테고리 우선
 - **Dalong.net**: 대용량 사이트 최적화 + 리뷰/사진 페이지 우선
 - **Bandai Manual**: PDF 메타데이터 관리 + 상세 페이지 우선
 - **Gundam Info**: 동적 시리즈 발견 + 제품/메카 페이지 우선
@@ -45,7 +44,6 @@ python3 smart_incremental_mirror.py <base_url> <output_dir> <max_pages> <site_na
 - 신뢰도 기반 데이터 분류
 
 **지원 사이트:**
-- `bnkrmall.co.kr`: 한국 건프라 온라인 쇼핑몰
 - `dalong.net`: 일본 건프라 리뷰 사이트
 - `manual.bandai-hobby.net`: 반다이 공식 매뉴얼 사이트
 - `kr.gundam.info`: 건담 공식 정보 사이트
@@ -99,12 +97,6 @@ python3 extract_site_products.py <site_directory> <output_file> <site_name>
 - `mapping/bandai_product_ja_ko_mapping.json`: 일본어-한국어 번역 매핑 데이터
 - `mapping/bandai_product_ja_ko_mapping.json.*`: 백업 버전들
 
-### 제품 데이터베이스
-- `bnkrmall_products.json`: BNKR Mall 제품 정보
-- `dalong_products.json`: Dalong.net 제품 정보
-- `bandai-hobby_products.json`: 반다이 공식 제품 정보
-- `gundaminfo_products.json`: 건담 공식 사이트 제품 정보
-
 ### 기타 파일
 - `smart_mirror.db`: 스마트 미러링 메타데이터 SQLite 데이터베이스
 - `smart_mirror_*.db`: 사이트별 스마트 미러링 메타데이터 (격리 관리)
@@ -130,9 +122,6 @@ python3 extract_site_products.py <site_directory> <output_file> <site_name>
 
 ### 개별 사이트 처리 (모든 사이트에서 스마트 미러링 사용)
 ```bash
-# BNKR Mall - 동적 페이지네이션 + 우선순위 기반 수집
-./mirror_site.sh bnkrmall -c -e
-
 # Dalong.net - 대용량 사이트 최적화 + 리뷰/사진 우선
 ./mirror_site.sh dalong -c -e
 
@@ -147,9 +136,6 @@ python3 extract_site_products.py <site_directory> <output_file> <site_name>
 ```bash
 # 모든 사이트에서 통합 스마트 미러링 사용
 
-# BNKR Mall: 동적 쇼핑몰 최적화
-python3 smart_incremental_mirror.py http://www.bnkrmall.co.kr/main/index.do www.bnkrmall.co.kr 2000 bnkrmall
-
 # Dalong.net: 대용량 리뷰 사이트 최적화
 python3 smart_incremental_mirror.py http://www.dalong.net www.dalong.net 5000 dalong
 
@@ -161,9 +147,6 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 ```
 
 ### 사이트별 수집 특성 (통합 스마트 미러링 적용)
-- **BNKR Mall**: 건프라 카테고리 → 브랜드별 → 페이지네이션 순서로 우선순위 수집
-  - 키워드 필터링: `gunpla`, `figure`, `category`
-  - 동적 페이지네이션 지원 및 실시간 가격 정보 추적
 - **Dalong.net**: 리뷰/사진 페이지 → 목록 페이지 → 일반 페이지 순서로 수집
   - 키워드 필터: `photo`, `review`, `gundam`
   - 대용량 사이트 최적화 (5000페이지 한계)
@@ -195,7 +178,6 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 - 사이트별 데이터베이스로 격리 관리 (중복 방지)
 
 **2. 사이트별 특화 최적화**
-- **BNKR Mall**: 동적 페이지네이션 + 건프라 카테고리 우선 순위
 - **Dalong.net**: 리뷰/사진 페이지 우선순위 + 키워드 필터링
 - **Bandai Manual**: PDF/HTML 차별화 + 상세 페이지 우선
 - **Gundam Info**: 제품/메카 페이지 우선 + 동적 링크 발견
@@ -214,7 +196,6 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 
 | 사이트 | 우선순위 페이지 | 키워드 필터링 | 최대 깊이 | 특화 기능 |
 |--------|----------------|---------------|-----------|-----------|
-| **BNKR Mall** | 건프라 카테고리 우선 | gunpla, figure, category | 5단계 | 동적 페이지네이션 |
 | **Dalong** | 리뷰/사진 페이지 우선 | photo, review, gundam | 4단계 | 대용량 사이트 최적화 |
 | **Bandai** | 상세 페이지 + PDF 우선 | menus, detail, pdf | 3단계 | PDF 메타데이터 관리 |
 | **Gundam Info** | 제품/메카 페이지 우선 | gundam, gunpla, mecha | 4단계 | 동적 시리즈 발견 |
@@ -249,12 +230,6 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 - 🔗 지능형 링크 추출 (동적 콘텐츠 지원)
 - 📈 수집 완성도 95% 향상 (기존 wget 대비)
 - 🎯 제품/메카 페이지 우선 수집
-
-**쇼핑몰 사이트 (BNKR Mall)**
-- 🛒 동적 페이지네이션 지원 (실시간 가격 정보)
-- 📦 건프라 카테고리 우선 수집
-- 🔄 브랜드별 → 페이지네이션 순서 최적화
-- 💾 실시간 재고 정보 추적 (변경 감지)
 
 ## 개발 환경
 - Python 3.8+

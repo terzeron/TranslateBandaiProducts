@@ -4,11 +4,6 @@
 
 echo "건프라 사이트 데이터 수집 시작..."
 
-# BNKR Mall 데이터 수집
-echo
-echo "=== BNKR Mall 데이터 추출 ==="
-./mirror_site.sh bnkrmall -e > bnkrmall.log 2>&1
-
 # Gundaminfo 데이터 수집
 echo
 echo "=== Gundaminfo 데이터 추출 ==="

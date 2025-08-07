@@ -18,11 +18,6 @@ manual.bandai-hobby.net/
 
 # 생성된 JSON 파일들 (큰 파일들)
 *_products.json
-*_reference.json
-dalong_products.json
-bnkrmall_products.json
-gundaminfo_products.json
-bandai-hobby_products.json
 
 # 임시 파일들
 *_test.*

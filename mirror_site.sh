@@ -3,13 +3,12 @@
 # 사용법 출력 함수
 usage() {
     echo "Usage: $0 <site_name> [-c] [-e]"
-    echo "  site_name: Target site (bnkrmall, dalong, bandai-hobby, or gundam-wiki)"
+    echo "  site_name: Target site (dalong, bandai-hobby, or gundam-wiki)"
     echo "  -c: Collect/mirror website"
     echo "  -e: Extract products only"
     echo "  Both options can be used together"
     echo ""
     echo "Sites:"
-    echo "  bnkrmall: BNKR Mall (uses Selenium for dynamic content)"
     echo "  dalong: Dalong.net (static mirroring)"
     echo "  bandai-hobby: Bandai Manual site (static mirroring + PDFs)"
     echo "  gundam-wiki: Gundam Wiki sites (Fandom + Namu Wiki)"
@@ -51,11 +50,6 @@ fi
 
 # 사이트별 설정
 case "$site_name" in
-    "bnkrmall")
-        hostname="www.bnkrmall.co.kr"
-        url="http://$hostname/main/index.do"
-        output_file="${site_name}_products.txt"
-        ;;
     "dalong")
         hostname="www.dalong.net"
         url="http://$hostname"
@@ -73,7 +67,7 @@ case "$site_name" in
         ;;
     *)
         echo "Unsupported site: $site_name"
-        echo "Supported sites: bnkrmall, dalong, bandai-hobby, gundaminfo"
+        echo "Supported sites: dalong, bandai-hobby, gundaminfo"
         exit 1
         ;;
 esac
@@ -82,11 +76,6 @@ if [ "$do_collect" = "1" ]; then
     echo "$site_name 건프라 페이지 미러링 시작..."
     
     case "$site_name" in
-        "bnkrmall")
-            # BNKR Mall: 스마트 증분 미러링 (빠르고 효율적)
-            echo "BNKR Mall 스마트 증분 미러링 중..."
-            ./smart_incremental_mirror.py "$url" "$hostname" 10000 "bnkrmall"
-            ;;
         "dalong")
             # Dalong.net: 스마트 증분 미러링 (우선순위 기반 + 효율적 변경 감지)
             echo "Dalong.net 스마트 증분 미러링 중..."

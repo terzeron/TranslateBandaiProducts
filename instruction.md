@@ -19,7 +19,6 @@ translating error: [브랜드] / [일본어_상품명] / [상품번호]
 ## 번역 참고자료
 기존 한국어 번역을 참고하세요:
 - bandai-hobby_products.txt
-- bnkrmall_products.txt
 - dalong_products.txt
 - gundaminfo_products.txt
 
