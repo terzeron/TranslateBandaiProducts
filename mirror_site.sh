@@ -3,15 +3,16 @@
 # 사용법 출력 함수
 usage() {
     echo "Usage: $0 <site_name> [-c] [-e]"
-    echo "  site_name: Target site (dalong, bandai-hobby, or gundam-wiki)"
+    echo "  site_name: Target site (dalong, bandai-hobby, gundaminfo, or gcd)"
     echo "  -c: Collect/mirror website"
     echo "  -e: Extract products only"
     echo "  Both options can be used together"
     echo ""
     echo "Sites:"
-    echo "  dalong: Dalong.net (static mirroring)"
-    echo "  bandai-hobby: Bandai Manual site (static mirroring + PDFs)"
-    echo "  gundam-wiki: Gundam Wiki sites (Fandom + Namu Wiki)"
+    echo "  dalong: Dalong.net (smart incremental mirroring)"
+    echo "  bandai-hobby: Bandai Manual site (smart incremental mirroring + PDFs)"
+    echo "  gundaminfo: Gundam Info (smart incremental mirroring)"
+    echo "  gcd: Naver Cafe JSON API (paged crawling, page=1..N)"
     exit 1
 }
 
@@ -65,9 +66,14 @@ case "$site_name" in
         url="https://kr.gundam.info"
         output_file="${site_name}_products.txt"
         ;;
+    "gcd")
+        hostname="apis.naver.com"
+        url="https://apis.naver.com/cafe-web/cafe-boardlist-api/v1/cafes/11569626/menus/394/articles?pageSize=50&sortBy=TIME&viewType=L&page="
+        output_file="${site_name}_articles.json"
+        ;;
     *)
         echo "Unsupported site: $site_name"
-        echo "Supported sites: dalong, bandai-hobby, gundaminfo"
+        echo "Supported sites: dalong, bandai-hobby, gundaminfo, gcd"
         exit 1
         ;;
 esac
@@ -91,6 +97,11 @@ if [ "$do_collect" = "1" ]; then
             echo "Gundam Info 스마트 증분 미러링 중..."
             ./smart_incremental_mirror.py "$url" "$hostname" 10000 "gundaminfo"
             ;;
+        "gcd")
+            # gcd: JSON API 페이지 순회 (page=1..N), 대량 URL 초기 등록 없이 전용 루프
+            echo "gcd JSON API 수집 중..."
+            ./smart_incremental_mirror.py "$url" "gcd" 300 "gcd"
+            ;;
     esac
     
     echo "미러링 완료."
@@ -98,6 +109,13 @@ fi
 
 if [ "$do_extract" = "1" ]; then
     echo "$site_name 건프라 상품명 추출 시작..."
-    ./extract_site_products.py "$hostname" "$output_file" "$site_name"
-    echo "추출 완료: $output_file"
+    if [ "$site_name" = "gcd" ]; then
+        # gcd: JSON 텍스트 추출 수행 (subjects)
+        # 미러 디렉터리는 수집 시 지정한 출력 디렉터리인 "gcd"
+        ./extract_site_products.py "gcd" "gcd_products.txt" "$site_name"
+        echo "추출 완료: gcd_products.txt"
+    else
+        ./extract_site_products.py "$hostname" "$output_file" "$site_name"
+        echo "추출 완료: $output_file"
+    fi
 fi

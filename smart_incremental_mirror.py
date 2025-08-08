@@ -189,6 +189,15 @@ class SiteConfig:
                 'file_extensions': ['.html', '.htm', '.php'],
                 'max_depth': 4
             }
+            ,
+            'gcd': {
+                # JSON API 기반 수집 (페이지네이션)
+                'priority_patterns': [],
+                'link_keywords': [],
+                'file_extensions': ['.json'],
+                'max_depth': 1,
+                'max_pages': 300
+            }
         }
         
         return configs.get(site_name, {})  
@@ -258,8 +267,8 @@ class SmartIncrementalMirror:
         
         return f"{parsed.scheme}://{parsed.netloc}{parsed.path}{'?' + normalized_query if normalized_query else ''}"
     
-    def get_file_path(self, url: str) -> Path:
-        """URL에서 파일 경로 생성"""
+    def get_file_path(self, url: str, file_type: str = 'html') -> Path:
+        """URL에서 파일 경로 생성 (파일 타입에 따라 확장자 결정)"""
         parsed = urlparse(url)
         
         # 경로 생성
@@ -274,8 +283,15 @@ class SmartIncrementalMirror:
         
         # 확장자 추가
         file_path = '/'.join(path_parts)
-        if not file_path.endswith('.html'):
-            file_path += '.html'
+        if file_type == 'pdf':
+            if not file_path.endswith('.pdf'):
+                file_path += '.pdf'
+        elif file_type == 'json':
+            if not file_path.endswith('.json'):
+                file_path += '.json'
+        else:
+            if not file_path.endswith('.html'):
+                file_path += '.html'
         
         return self.output_dir / file_path
     
@@ -328,8 +344,8 @@ class SmartIncrementalMirror:
             response = self.session.get(normalized_url, timeout=30)  # 타임아웃 단축
             response.raise_for_status()
             
-            # 파일 저장
-            file_path = self.get_file_path(normalized_url)
+            # 파일 저장 (타입에 따른 확장자)
+            file_path = self.get_file_path(normalized_url, file_type)
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
             if file_type == 'pdf':
@@ -478,6 +494,9 @@ class SmartIncrementalMirror:
             return self._get_bandai_urls()
         elif self.site_name == 'gundaminfo':
             return self._get_gundaminfo_urls()
+        elif self.site_name == 'gcd':
+            # JSON API는 스트리밍 방식으로 순회하므로 초기 URL 큐를 크게 만들지 않음
+            return [self.base_url]
         else:
             return [self.base_url]
 
@@ -509,6 +528,10 @@ class SmartIncrementalMirror:
 
     def mirror_site(self, max_pages: int = 10000):
         """스마트 증분 미러링 실행"""
+        # JSON API 기반의 gcd는 전용 경로로 처리 (대량 URL 초기 등록 회피)
+        if self.site_name == 'gcd':
+            return self._mirror_gcd_api(max_pages)
+
         logger.info("스마트 증분 미러링 시작")
         logger.info(f"최대 페이지 수: {max_pages}")
         
@@ -609,6 +632,37 @@ class SmartIncrementalMirror:
         logger.info(f"총 소요 시간: {elapsed:.1f}초")
         logger.info(f"평균 속도: {processed_count/elapsed:.1f} urls/sec")
         logger.info(f"실제 다운로드 비율: {self.downloaded_count/processed_count*100:.1f}%")
+
+    def _mirror_gcd_api(self, max_pages: int = 300):
+        """gcd(JSON API) 전용 수집: page=1..N 순회, 파일은 .json으로 저장"""
+        logger.info("gcd(JSON API) 수집 시작")
+        pages_to_fetch = min(max_pages, self.config.get('max_pages', 300))
+        start_time = time.time()
+        processed_pages = 0
+        self.file_manager.cleanup_orphaned_files()
+
+        for page_index in range(1, pages_to_fetch + 1):
+            page_url = f"{self.base_url}{page_index}"
+            logger.info(f"처리 중 페이지: {page_index}/{pages_to_fetch} - {page_url}")
+            success = self.download_file(page_url, file_type='json')
+            processed_pages += 1
+
+            # 진행 상황 출력 간격
+            if processed_pages % 50 == 0:
+                elapsed_mid = time.time() - start_time
+                rate = processed_pages / elapsed_mid if elapsed_mid > 0 else 0
+                logger.info(f"진행: {processed_pages}/{pages_to_fetch}, 다운로드: {self.downloaded_count}, 건너뛰기: {self.skipped_count}, 오류: {self.error_count}, 속도: {rate:.1f} req/sec")
+
+            # 서버 부담 완화
+            time.sleep(0.2 if success else 0.8)
+
+        elapsed = time.time() - start_time
+        logger.info("\n=== gcd 수집 완료 ===")
+        logger.info(f"총 요청 수: {processed_pages}")
+        logger.info(f"새로 다운로드: {self.downloaded_count}")
+        logger.info(f"건너뛴 파일: {self.skipped_count}")
+        logger.info(f"오류 발생: {self.error_count}")
+        logger.info(f"총 소요 시간: {elapsed:.1f}초, 평균 속도: {processed_pages/elapsed:.1f} req/sec")
 
 def main():
     """메인 함수"""

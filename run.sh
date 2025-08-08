@@ -4,6 +4,11 @@
 
 echo "건프라 사이트 데이터 수집 시작..."
 
+# gcd(JSON API) 데이터 수집
+echo
+echo "=== gcd(JSON API) 데이터 수집 ==="
+./mirror_site.sh gcd -c -e > gcd.log 2>&1
+
 # Gundaminfo 데이터 수집
 echo
 echo "=== Gundaminfo 데이터 추출 ==="
@@ -17,12 +22,14 @@ echo "=== Dalong.net 데이터 수집 ==="
 # Bandai Manual 데이터 수집
 echo
 echo "=== Bandai Manual 데이터 수집 ==="
-./mirror_site.sh bandai-hobby -c -e > bandai-hobby.log 2>&1
+./mirror_site.sh bandai-hobby -c > bandai-hobby.log 2>&1
 
 #echo
 #echo "=== 번역 참고 자료 추출 ==="
 #python gemini_agent.py < instruction.md
-(cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | ~/.claude/local/claude -p
+if ./convert_bandai_product_ja2ko.py | grep "translating error:" > /dev/null; then
+    (cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | ~/.claude/local/claude -p
+fi
 
 echo
 echo "=== Bandai Manual 결과 조회 및 HTML 저장 ==="

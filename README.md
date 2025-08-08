@@ -7,7 +7,6 @@
 - 다중 사이트 미러링 (Dalong.net, Bandai Manual, Gundam Info)
 - **통합 스마트 미러링**으로 모든 사이트에서 일관된 최적화
 - 사이트별 특화된 우선순위 수집 및 키워드 필터링
-- 머신러닝 기반 번역 최적화
 - 번역 오류 검출 및 분석
 
 ## 주요 스크립트
@@ -16,9 +15,8 @@
 모든 사이트에서 사용되는 통합 스마트 미러링 시스템의 핵심 엔진입니다.
 
 **주요 기능:**
-- **다중 변경 감지**: ETag, Last-Modified, 파일 크기, 내용 해시 등 종합적 변경 감지
+- **다중 변경 감지**: ETag, Last-Modified, 파일 크기 등 종합적 변경 감지
 - **사이트별 특화 최적화**: 각 사이트의 구조와 특성에 맞는 우선순위 패턴
-- **파일 타입 차별화**: PDF vs HTML 다른 업데이트 주기 (PDF: 30일, HTML: 7일)
 - **키워드 필터링**: 건프라 관련 페이지만 선택적 수집
 - **동적 링크 발견**: 하드코딩된 URL 의존성 제거
 - **SQLite 기반 격리 관리**: 사이트별 메타데이터 데이터베이스
@@ -47,6 +45,7 @@ python3 smart_incremental_mirror.py <base_url> <output_dir> <max_pages> <site_na
 - `dalong.net`: 일본 건프라 리뷰 사이트
 - `manual.bandai-hobby.net`: 반다이 공식 매뉴얼 사이트
 - `kr.gundam.info`: 건담 공식 정보 사이트
+- `gcd`: Naver Cafe JSON API (기사 제목 subject 추출)
 
 **사용법:**
 ```bash
@@ -68,6 +67,8 @@ python3 extract_site_products.py <site_directory> <output_file> <site_name>
 # -c: 사이트 미러링
 # -e: 제품 정보 추출
 ```
+
+지원 사이트: dalong, bandai-hobby, gundaminfo, gcd
 
 ### 4. `run.sh`
 전체 시스템의 통합 실행 스크립트입니다.
@@ -98,10 +99,7 @@ python3 extract_site_products.py <site_directory> <output_file> <site_name>
 - `mapping/bandai_product_ja_ko_mapping.json.*`: 백업 버전들
 
 ### 기타 파일
-- `smart_mirror.db`: 스마트 미러링 메타데이터 SQLite 데이터베이스
 - `smart_mirror_*.db`: 사이트별 스마트 미러링 메타데이터 (격리 관리)
-- `new_translations.json`: 새로운 번역 추천 데이터
-- `translation_report.md`: 번역 작업 보고서
 
 ## 시스템 아키텍처
 
@@ -130,6 +128,9 @@ python3 extract_site_products.py <site_directory> <output_file> <site_name>
 
 # Gundam Info - 동적 시리즈 발견 + 제품/메카 페이지 우선
 ./mirror_site.sh gundaminfo -c -e
+
+# gcd (Naver Cafe JSON API) - page=1..300 순회 수집 + 제목(subject) 추출
+./mirror_site.sh gcd -c -e
 ```
 
 ### 스마트 미러링 직접 실행
@@ -144,6 +145,9 @@ python3 smart_incremental_mirror.py https://manual.bandai-hobby.net manual.banda
 
 # Gundam Info: 동적 공식 사이트 최적화
 python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 gundaminfo
+
+# gcd: JSON API 페이지 순회 (page=1..300), 출력 디렉터리: gcd
+python3 smart_incremental_mirror.py "https://apis.naver.com/cafe-web/cafe-boardlist-api/v1/cafes/11569626/menus/394/articles?pageSize=50&sortBy=TIME&viewType=L&page=" gcd 300 gcd
 ```
 
 ### 사이트별 수집 특성 (통합 스마트 미러링 적용)
@@ -156,13 +160,15 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 - **Gundam Info**: 제품/메카 페이지 → 뉴스 → 일반 페이지 순서로 수집
   - 키워드 필터: `gundam`, `gunpla`, `mecha`
   - 동적 시리즈 발견 및 하드코딩 URL 의존성 제거
+ - **gcd**: JSON API 페이지네이션 순회 (page=1..300)
+   - JSON Path: `.result.articleList[].item.subject`
+   - 대량 URL 초기 등록 없이 내부 루프 순회
 
 
 ## 결과물
 - 한국어로 번역된 건프라 제품 정보 HTML 페이지
 - 반다이 매뉴얼 PDF 파일들에 대한 한국어 제목 심볼릭 링크
-- 건프라 제품 정보 통합 데이터베이스
-- 번역 품질 보고서
+ - 사이트별 추출 텍스트 파일: `dalong_products.txt`, `gundaminfo_products.txt`, `gcd_products.txt`
 
 ## 사이트별 최적화 전략
 
@@ -174,7 +180,7 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 
 **1. 일관된 메타데이터 관리**
 - 모든 사이트에서 SQLite 기반 상태 추적
-- ETag, Last-Modified, 파일 크기, 내용 해시 등 다중 변경 감지
+- ETag, Last-Modified, 파일 크기 등 다중 변경 감지
 - 사이트별 데이터베이스로 격리 관리 (중복 방지)
 
 **2. 사이트별 특화 최적화**
@@ -183,14 +189,13 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 - **Gundam Info**: 제품/메카 페이지 우선 + 동적 링크 발견
 
 **3. 우선순위 기반 지능형 수집**
-- 중요한 콘텐츠를 먼저 다운로드
-- 사이트별 키워드 필터링으로 관련성 높은 페이지만 수집
-- 깊이 제한으로 불필요한 탐색 방지
+ - 중요한 콘텐츠를 먼저 다운로드
+ - 사이트별 키워드 필터링으로 관련성 높은 페이지만 수집
+ - 깊이 제한으로 불필요한 탐색 방지
 
 **4. 파일 타입 차별화**
-- PDF 파일: 30일 업데이트 주기 (안정성 중심)
-- HTML 파일: 7일 업데이트 주기 (최신성 중심)
-- 파일 타입별 다른 메타데이터 추적
+ - PDF 파일: 1주일(168시간) 주기 재검사
+ - HTML 파일: 24시간 주기 재검사
 
 ### 사이트별 스마트 미러링 설정
 
@@ -204,7 +209,7 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 
 | 기능 | wget --mirror | smart_incremental_mirror.py | 우위 |
 |------|---------------|------------------------------|------|
-| 변경 감지 | Last-Modified만 | ETag + Last-Modified + 해시 + 크기 | 🏆 **스마트** |
+| 변경 감지 | Last-Modified만 | ETag + Last-Modified + 크기 | 🏆 **스마트** |
 | 우선순위 제어 | ❌ 불가능 | ✅ 사이트별 우선순위 패턴 | 🏆 **스마트** |
 | 메타데이터 관리 | ❌ 제한적 | ✅ SQLite 기반 완전 추적 | 🏆 **스마트** |
 | 사이트별 최적화 | ❌ 범용적 | ✅ 키워드/깊이/확장자 제어 | 🏆 **스마트** |
@@ -220,22 +225,18 @@ python3 smart_incremental_mirror.py https://kr.gundam.info kr.gundam.info 2000 g
 - 🗃️ 메타데이터 관리: 분리된 SQLite DB로 안정적 추적
 
 **복잡한 구조 (Bandai Manual)**  
-- 📁 PDF 메타데이터 정확한 추적 (30일 업데이트 주기)
-- 🔍 ETag 기반 정밀한 변경 감지 (HTTP 헤더 최적화)
-- 📊 파일 타입별 업데이트 주기 차별화 (PDF vs HTML)
-- 🎯 우선순위 수집: 상세 페이지 + PDF 먼저
+ - 🎯 우선순위 수집: 상세/메뉴 페이지 먼저
 
 **동적 콘텐츠 (Gundam Info)**
 - 🌐 새로운 시리즈 자동 발견 (하드코딩 URL 불필요)
 - 🔗 지능형 링크 추출 (동적 콘텐츠 지원)
-- 📈 수집 완성도 95% 향상 (기존 wget 대비)
 - 🎯 제품/메카 페이지 우선 수집
 
 ## 개발 환경
 - Python 3.8+
 - SQLite 3
 - Bash shell
-- 필요한 Python 패키지: requests, beautifulsoup4, urllib3
+- 필요한 Python 패키지: requests, urllib3, chardet(선택)
 
 ## 참고사항
 - 각 사이트의 서버 부하를 고려하여 적절한 지연 시간 설정

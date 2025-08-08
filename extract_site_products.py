@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from html.parser import HTMLParser
 import unicodedata
+import json
 
 # chardet가 없을 경우를 대비한 fallback
 try:
@@ -601,6 +602,59 @@ def process_mirror_directory(mirror_dir, site_name):
     return all_products
 
 
+def process_gcd_directory(mirror_dir: str) -> list[str]:
+    """gcd(JSON API) 미러 디렉터리에서 subject 목록 추출 (.result.articleList[].item.subject)"""
+    subjects: list[str] = []
+    json_files = list(Path(mirror_dir).rglob("*.json"))
+    print(f"Found {len(json_files)} JSON files...")
+    for json_file in json_files:
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            result = data.get('result') if isinstance(data, dict) else None
+            if not result:
+                continue
+            article_list = result.get('articleList', [])
+            for entry in article_list:
+                if not isinstance(entry, dict):
+                    continue
+                item = entry.get('item', {})
+                subject = item.get('subject')
+                if isinstance(subject, str):
+                    cleaned = ProductExtractor('gcd').clean_text(subject)
+                    if cleaned and 3 <= len(cleaned) <= 200:
+                        subjects.append(cleaned)
+        except Exception as e:
+            print(f"Error processing JSON {json_file}: {e}")
+            continue
+    return subjects
+
+
+def save_gcd_subjects(subjects: list[str], output_file: str) -> None:
+    """gcd 추출 결과를 텍스트 파일로 저장"""
+    # 중복 제거 (공백 정규화 + 소문자 기준)
+    normalized_map: dict[str, str] = {}
+    for s in subjects:
+        normalized = re.sub(r'\s+', ' ', s.strip().lower())
+        if normalized not in normalized_map:
+            normalized_map[normalized] = s.strip()
+    unique_subjects = list(normalized_map.values())
+    unique_subjects.sort()
+
+    current_date = os.popen('date +"%Y-%m-%d"').read().strip()
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(f"# gcd 기사 제목 추출 결과\n")
+        f.write(f"# 날짜: {current_date}\n")
+        f.write(f"# 총 {len(unique_subjects)}개 추출 (JSON path: .result.articleList[].item.subject)\n\n")
+        seen_lines = set()
+        for subj in unique_subjects:
+            key = re.sub(r'\s+', ' ', subj.strip().lower())
+            if key in seen_lines:
+                continue
+            seen_lines.add(key)
+            f.write(f"{subj}\n")
+
+
 def save_semi_structured_data(products, output_file, site_name):
     """추출된 상품 정보를 title 태그 중심으로 저장 (토큰 절약)"""
     # title 관련 태그들에서 추출된 것들을 우선 수집
@@ -682,24 +736,43 @@ def save_semi_structured_data(products, output_file, site_name):
         f.write(f"# 날짜: {current_date}\n")
         f.write(f"# 총 {len(sorted_products)}개 추출 (title 태그 우선)\n")
         f.write(f"# 용도: 모든 title 필드 텍스트 수집\n\n")
-        
-        # title 관련 태그들에서 추출된 것들 우선 출력
+
         title_products_filtered = [p for p in sorted_products if p['source'] in ['title', 'link_title', 'heading_title', 'emphasized_title', 'meta_title', 'filename_title']]
         other_products_filtered = [p for p in sorted_products if p['source'] not in ['title', 'link_title', 'heading_title', 'emphasized_title', 'meta_title', 'filename_title']]
-        
+
+        def normalize_line(text: str) -> str:
+            return re.sub(r'\s+', ' ', text.strip().lower())
+
+        seen_lines = set()
+
         if TITLE_ONLY:
             f.write(f"## Title 관련 태그에서 추출 ({len(title_products_filtered)}개)\n")
             for product in title_products_filtered:
-                f.write(f"{product['text']}\n")
+                line = product['text']
+                key = normalize_line(line)
+                if key in seen_lines:
+                    continue
+                seen_lines.add(key)
+                f.write(f"{line}\n")
         else:
             f.write(f"## Title 관련 태그에서 추출 ({len(title_products_filtered)}개)\n")
             for product in title_products_filtered:
-                f.write(f"{product['text']}\n")
-            
+                line = product['text']
+                key = normalize_line(line)
+                if key in seen_lines:
+                    continue
+                seen_lines.add(key)
+                f.write(f"{line}\n")
+
             if other_products_filtered:
                 f.write(f"\n## 기타 필드에서 추출 ({len(other_products_filtered)}개)\n")
-                for product in other_products_filtered[:200]:  # 최대 200개만
-                    f.write(f"{product['text']}\n")
+                for product in other_products_filtered[:200]:
+                    line = product['text']
+                    key = normalize_line(line)
+                    if key in seen_lines:
+                        continue
+                    seen_lines.add(key)
+                    f.write(f"{line}\n")
     
     # 토큰 사용량 추정
     total_chars = sum(len(p['text']) for p in sorted_products)
@@ -775,9 +848,19 @@ def main():
         print(f"Error: Mirror directory '{mirror_dir}' does not exist")
         sys.exit(1)
     
-    print(f"Extracting Gunpla products from {site_name}: {mirror_dir}")
+    print(f"Extracting products from {site_name}: {mirror_dir}")
     
-    # HTML 파일에서 상품 정보 추출
+    # gcd(JSON API) 전용 처리
+    if site_name == "gcd":
+        subjects = process_gcd_directory(mirror_dir)
+        if not subjects:
+            print("No subjects found from JSON")
+            sys.exit(1)
+        save_gcd_subjects(subjects, output_file)
+        print(f"Extraction completed successfully! Total subjects: {len(subjects)}")
+        return
+    
+    # HTML 파일에서 상품 정보 추출 (기존 사이트)
     products = process_mirror_directory(mirror_dir, site_name)
     
     if not products:
