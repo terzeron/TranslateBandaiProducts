@@ -28,7 +28,8 @@ echo "=== Bandai Manual 데이터 수집 ==="
 #echo "=== 번역 참고 자료 추출 ==="
 #python gemini_agent.py < instruction.md
 if ./convert_bandai_product_ja2ko.py | grep "translating error:" > /dev/null; then
-    (cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | ~/.claude/local/claude -p
+    #(cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | ~/.claude/local/claude -p
+    (cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | /bin/codex exec --sandbox=workspace-write
 fi
 
 echo
