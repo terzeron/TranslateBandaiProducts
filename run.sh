@@ -1,5 +1,10 @@
 #!/bin/bash
 
+cd ~/workspace/translate_bandai_products
+pwd
+
+eval "$(direnv export bash)"
+
 # 건프라 사이트 미러링 및 상품명 추출 통합 스크립트
 
 echo "건프라 사이트 데이터 수집 시작..."
