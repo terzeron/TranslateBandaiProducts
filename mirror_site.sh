@@ -2,17 +2,21 @@
 
 # 사용법 출력 함수
 usage() {
-    echo "Usage: $0 <site_name> [-c] [-e]"
+    echo "Usage: $0 <site_name> [-c] [-e] [-x URL_PREFIX]..."
     echo "  site_name: Target site (dalong, bandai-hobby, gundaminfo, or gcd)"
     echo "  -c: Collect/mirror website"
     echo "  -e: Extract products only"
-    echo "  Both options can be used together"
+    echo "  -x URL_PREFIX: Exclude URLs starting with this prefix (can be used multiple times)"
+    echo "  Both -c and -e options can be used together"
     echo ""
     echo "Sites:"
     echo "  dalong: Dalong.net (smart incremental mirroring)"
     echo "  bandai-hobby: Bandai Manual site (smart incremental mirroring + PDFs)"
     echo "  gundaminfo: Gundam Info (smart incremental mirroring)"
     echo "  gcd: Naver Cafe JSON API (paged crawling, page=1..N)"
+    echo ""
+    echo "Example:"
+    echo "  $0 bandai-hobby -c -x https://manual.bandai-hobby.net/admin"
     exit 1
 }
 
@@ -26,6 +30,7 @@ shift
 
 do_collect=0
 do_extract=0
+exclude_opts=()
 
 # 옵션 파싱
 while [ $# -gt 0 ]; do
@@ -35,6 +40,14 @@ while [ $# -gt 0 ]; do
             ;;
         -e)
             do_extract=1
+            ;;
+        -x)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: -x requires a URL prefix argument"
+                usage
+            fi
+            exclude_opts+=("-x" "$1")
             ;;
         *)
             echo "Unknown option: $1"
@@ -51,6 +64,11 @@ fi
 
 # 사이트별 설정
 case "$site_name" in
+    "bnkrmall")
+        hostname="www.bnkrmall.co.kr"
+        url="https://$hostname/main/gunpla_index.do"
+        output_file="${site_name}_products.txt"
+        ;;
     "dalong")
         hostname="www.dalong.net"
         url="http://$hostname"
@@ -82,25 +100,100 @@ if [ "$do_collect" = "1" ]; then
     echo "$site_name 건프라 페이지 미러링 시작..."
     
     case "$site_name" in
+        "bnkrmall")
+            # 반다이몰: 스마트 증분 미러링 (우선순위 기반 + 효율적 변경 감지)
+            # 두 번 실패하면 종료
+            echo "bnkrmall.co.kr: 스마트 증분 미러링 중..."
+            retry_count=0
+            max_retries=2
+            while [ $retry_count -lt $max_retries ]; do
+                if ./smart_incremental_mirror.py "$url" "$hostname" 10000 "$site_name" "${exclude_opts[@]}"; then
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                    echo "실패 ($retry_count/$max_retries). 재시도 중..."
+                else
+                    echo "두 번 실패하여 종료합니다."
+                    exit 1
+                fi
+            done
+            ;;
         "dalong")
             # Dalong.net: 스마트 증분 미러링 (우선순위 기반 + 효율적 변경 감지)
+            # 두 번 실패하면 종료
             echo "Dalong.net 스마트 증분 미러링 중..."
-            ./smart_incremental_mirror.py "$url" "$hostname" 10000 "dalong"
+            retry_count=0
+            max_retries=2
+            while [ $retry_count -lt $max_retries ]; do
+                if ./smart_incremental_mirror.py "$url" "$hostname" 10000 "$site_name" "${exclude_opts[@]}"; then
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                    echo "실패 ($retry_count/$max_retries). 재시도 중..."
+                else
+                    echo "두 번 실패하여 종료합니다."
+                    exit 1
+                fi
+            done
             ;;
         "bandai-hobby")
             # Bandai Manual: 스마트 증분 미러링 필수 (복잡한 캐싱 + PDF 관리)
+            # 두 번 실패하면 종료
             echo "Bandai Manual 스마트 증분 미러링 중..."
-            ./smart_incremental_mirror.py "$url" "$hostname" 10000 "bandai-hobby"
+            retry_count=0
+            max_retries=2
+            while [ $retry_count -lt $max_retries ]; do
+                if ./smart_incremental_mirror.py "$url" "$hostname" 10000 "$site_name" "${exclude_opts[@]}"; then
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                    echo "실패 ($retry_count/$max_retries). 재시도 중..."
+                else
+                    echo "두 번 실패하여 종료합니다."
+                    exit 1
+                fi
+            done
             ;;
         "gundaminfo")
             # Gundam Info: 스마트 증분 미러링 필수 (동적 콘텐츠 + 우선순위 기반 수집)
+            # 두 번 실패하면 종료
             echo "Gundam Info 스마트 증분 미러링 중..."
-            ./smart_incremental_mirror.py "$url" "$hostname" 10000 "gundaminfo"
+            retry_count=0
+            max_retries=2
+            while [ $retry_count -lt $max_retries ]; do
+                if ./smart_incremental_mirror.py "$url" "$hostname" 10000 "$site_name" "${exclude_opts[@]}"; then
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                    echo "실패 ($retry_count/$max_retries). 재시도 중..."
+                else
+                    echo "두 번 실패하여 종료합니다."
+                    exit 1
+                fi
+            done
             ;;
         "gcd")
             # gcd: JSON API 페이지 순회 (page=1..N), 대량 URL 초기 등록 없이 전용 루프
+            # 두 번 실패하면 종료
             echo "gcd JSON API 수집 중..."
-            ./smart_incremental_mirror.py "$url" "gcd" 300 "gcd"
+            retry_count=0
+            max_retries=2
+            while [ $retry_count -lt $max_retries ]; do
+                if ./smart_incremental_mirror.py "$url" "gcd" 300 "gcd" "${exclude_opts[@]}"; then
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                    echo "실패 ($retry_count/$max_retries). 재시도 중..."
+                else
+                    echo "두 번 실패하여 종료합니다."
+                    exit 1
+                fi
+            done
             ;;
     esac
     

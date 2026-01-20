@@ -6,6 +6,7 @@ import time
 import hashlib
 import sqlite3
 import re
+import argparse
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from typing import Dict, Set, List, Optional
@@ -197,15 +198,48 @@ class SiteConfig:
                 'file_extensions': ['.json'],
                 'max_depth': 1,
                 'max_pages': 300
+            },
+            'bnkrmall': {
+                'priority_patterns': [
+                    (r'/goods/view\.do', 3),       # 상품 상세 페이지 우선
+                    (r'/goods/category\.do', 2),  # 카테고리 페이지
+                    (r'/goods/.*', 2),            # 기타 상품 페이지
+                    (r'/.*\.do', 1),              # 일반 동적 페이지
+                ],
+                'link_keywords': ['goods', 'category', 'view', 'new', 'search'],
+                'file_extensions': ['.html', '.htm', '.do'],
+                'max_depth': 4,
+                # Rate limiting 설정 (차단 방지)
+                'delay_per_request': 0.5,  # 매 요청마다 500ms 대기
+                'batch_size': 20,          # 20개 요청마다
+                'batch_delay': 5.0,        # 5초 휴식
+                'error_delay': 10.0        # 에러 발생 시 10초 대기
             }
         }
 
-        return configs.get(site_name, {})
+        # 기본 설정
+        default_config = {
+            'priority_patterns': [],
+            'link_keywords': [],
+            'file_extensions': ['.html', '.htm'],
+            'max_depth': 3,
+            'delay_per_request': 0,  # 기본: 딜레이 없음
+            'batch_size': 0,         # 기본: 배치 휴식 없음
+            'batch_delay': 0,
+            'error_delay': 3.0       # 기본: 에러 시 3초 대기
+        }
+
+        config = configs.get(site_name, default_config)
+        # 누락된 키가 있으면 기본값으로 채움
+        for key, value in default_config.items():
+            if key not in config:
+                config[key] = value
+        return config
 
 class SmartIncrementalMirror:
     """스마트 증분 미러링 시스템"""
 
-    def __init__(self, base_url: str, output_dir: str, site_name: str):
+    def __init__(self, base_url: str, output_dir: str, site_name: str, exclude_prefixes: Optional[List[str]] = None):
         self.base_url = base_url.rstrip('/')
         self.output_dir = Path(output_dir)
         self.site_name = site_name
@@ -215,9 +249,22 @@ class SmartIncrementalMirror:
         self.downloaded_count = 0
         self.skipped_count = 0
         self.error_count = 0
+        self.excluded_count = 0  # 제외된 URL 카운트
+        self.consecutive_error_count = 0  # 연속 에러 카운트
+        self.max_consecutive_errors = 5  # 연속 에러 허용 횟수
+
+        # 제외할 URL prefix 목록
+        self.exclude_prefixes = exclude_prefixes or []
+
+        # base_url에서 도메인 추출 (링크 필터링용)
+        parsed = urlparse(self.base_url)
+        self.base_domain = f"{parsed.scheme}://{parsed.netloc}"
 
         # 사이트별 우선순위 패턴
         self.priority_patterns = self.config['priority_patterns']
+
+        if self.exclude_prefixes:
+            logger.info(f"제외 URL prefix: {self.exclude_prefixes}")
 
     def create_session(self) -> requests.Session:
         """최적화된 requests 세션 생성"""
@@ -250,6 +297,15 @@ class SmartIncrementalMirror:
         })
 
         return session
+
+    def is_excluded_url(self, url: str) -> bool:
+        """URL이 제외 prefix에 해당하는지 확인"""
+        if not self.exclude_prefixes:
+            return False
+        for prefix in self.exclude_prefixes:
+            if url.startswith(prefix):
+                return True
+        return False
 
     def get_url_priority(self, url: str) -> int:
         """URL 우선순위 계산"""
@@ -328,8 +384,14 @@ class SmartIncrementalMirror:
         else:
             return 'html'
 
-    def download_file(self, url: str, file_type: Optional[str] = None) -> bool:
-        """파일 다운로드 (HTML/PDF/기타 지원) - 이미지/CSS/JS는 스킵"""
+    def download_file(self, url: str, file_type: Optional[str] = None) -> Optional[bool]:
+        """파일 다운로드 (HTML/PDF/기타 지원) - 이미지/CSS/JS는 스킵
+
+        Returns:
+            True: 다운로드 성공
+            None: 스킵됨 (정상 처리)
+            False: 에러 발생
+        """
         normalized_url = self.normalize_url(url)
 
         # 타입 자동 판별 (json 등 명시 전달 시 우선)
@@ -339,18 +401,20 @@ class SmartIncrementalMirror:
         # 이미지/정적 리소스는 저장하지 않고 스킵
         if file_type in ('image', 'static'):
             self.skipped_count += 1
+            # 스킵은 서버 응답 성공이 아니므로 연속 에러 카운트 유지
             if self.skipped_count % 50 == 0:
                 logger.info(f"건너뛴 파일: {self.skipped_count}개")
-            return False
+            return None  # 스킵됨
 
         # 업데이트 필요 여부 확인
         needs_update, headers = self.check_if_update_needed(normalized_url)
 
         if not needs_update:
             self.skipped_count += 1
+            self.consecutive_error_count = 0  # 서버에서 HEAD 응답 성공했으므로 리셋
             if self.skipped_count % 50 == 0:  # 더 자주 진행상황 출력
                 logger.info(f"건너뛴 파일: {self.skipped_count}개")
-            return False
+            return None  # 스킵됨
 
         try:
             # 실제 다운로드
@@ -387,6 +451,7 @@ class SmartIncrementalMirror:
             )
 
             self.downloaded_count += 1
+            self.consecutive_error_count = 0  # 성공 시 연속 에러 카운트 리셋
             if self.downloaded_count % 20 == 0:  # 더 자주 진행상황 출력
                 logger.info(f"다운로드: {self.downloaded_count}개, 건너뛰기: {self.skipped_count}개")
 
@@ -394,7 +459,8 @@ class SmartIncrementalMirror:
 
         except Exception as e:
             self.error_count += 1
-            logger.error(f"다운로드 실패 {normalized_url}: {e}")
+            self.consecutive_error_count += 1
+            logger.error(f"다운로드 실패 {normalized_url}: {e} (연속 에러: {self.consecutive_error_count}/{self.max_consecutive_errors})")
             return False
 
     def extract_links(self, content: str, base_url: str) -> Set[str]:
@@ -409,8 +475,12 @@ class SmartIncrementalMirror:
 
             full_url = urljoin(base_url, href)
 
-            # 사이트별 키워드로 필터링
-            if (full_url.startswith(self.base_url) and
+            # 제외 prefix 체크
+            if self.is_excluded_url(full_url):
+                continue
+
+            # 사이트별 키워드로 필터링 (도메인 기준으로 비교)
+            if (full_url.startswith(self.base_domain) and
                 any(keyword in full_url.lower() for keyword in self.config['link_keywords'])):
                 links.add(full_url)
 
@@ -564,15 +634,50 @@ class SmartIncrementalMirror:
             if current_url in visited_urls:
                 continue
 
+            # 제외 prefix 체크
+            if self.is_excluded_url(current_url):
+                self.excluded_count += 1
+                if self.excluded_count % 50 == 0:
+                    logger.info(f"제외된 URL: {self.excluded_count}개")
+                continue
+
             visited_urls.add(current_url)
             processed_count += 1
 
             logger.info(f"처리 중 [{processed_count}/{max_pages}]: {current_url}")
 
-            # 페이지 다운로드
-            success = self.download_file(current_url)
+            # 페이지 다운로드 (True: 성공, None: 스킵, False: 에러)
+            result = self.download_file(current_url)
 
-            if success:
+            # Rate limiting 적용
+            delay_per_request = self.config.get('delay_per_request', 0)
+            batch_size = self.config.get('batch_size', 0)
+            batch_delay = self.config.get('batch_delay', 0)
+            error_delay = self.config.get('error_delay', 3.0)
+
+            if result is False:
+                # 실제 에러 발생 시
+                # 연속 에러 체크
+                if self.consecutive_error_count >= self.max_consecutive_errors:
+                    logger.error(f"연속 {self.max_consecutive_errors}회 에러 발생으로 미러링 중단")
+                    sys.exit(1)
+                # 에러 발생 시 백오프
+                if error_delay > 0:
+                    logger.info(f"에러 발생, {error_delay}초 대기 중...")
+                    time.sleep(error_delay)
+            elif result is True:
+                # 다운로드 성공 시
+                # 매 요청마다 딜레이
+                if delay_per_request > 0:
+                    time.sleep(delay_per_request)
+
+                # 배치 단위로 추가 휴식
+                if batch_size > 0 and processed_count % batch_size == 0:
+                    logger.info(f"{batch_size}개 요청 완료, {batch_delay}초 휴식 중...")
+                    time.sleep(batch_delay)
+            # result is None: 스킵된 경우 - 특별한 처리 없음
+
+            if result is True:
                 # 새로운 링크 추출
                 try:
                     file_path = self.get_file_path(current_url)
@@ -620,10 +725,11 @@ class SmartIncrementalMirror:
                           f"속도: {rate:.1f} urls/sec")
 
             # 요청 간격 (서버 부하 방지) - 동적 대기 시간
-            if success:
+            if result is True:
                 time.sleep(0.3)  # 성공 시 짧은 대기
-            else:
-                time.sleep(1.0)  # 실패 시 긴 대기
+            elif result is False:
+                time.sleep(1.0)  # 에러 시 긴 대기
+            # 스킵(None)은 대기 없음
 
         # 최종 통계
         elapsed = time.time() - start_time
@@ -641,10 +747,12 @@ class SmartIncrementalMirror:
         logger.info(f"총 처리 URL: {processed_count}")
         logger.info(f"새로 다운로드: {self.downloaded_count}")
         logger.info(f"건너뛴 파일: {self.skipped_count}")
+        logger.info(f"제외된 URL: {self.excluded_count}")
         logger.info(f"오류 발생: {self.error_count}")
         logger.info(f"총 소요 시간: {elapsed:.1f}초")
         logger.info(f"평균 속도: {processed_count/elapsed:.1f} urls/sec")
-        logger.info(f"실제 다운로드 비율: {self.downloaded_count/processed_count*100:.1f}%")
+        if processed_count > 0:
+            logger.info(f"실제 다운로드 비율: {self.downloaded_count/processed_count*100:.1f}%")
 
     def _mirror_gcd_api(self, max_pages: int = 300):
         """gcd(JSON API) 전용 수집: page=1..N 순회, 파일은 .json으로 저장"""
@@ -657,8 +765,14 @@ class SmartIncrementalMirror:
         for page_index in range(1, pages_to_fetch + 1):
             page_url = f"{self.base_url}{page_index}"
             logger.info(f"처리 중 페이지: {page_index}/{pages_to_fetch} - {page_url}")
-            success = self.download_file(page_url, file_type='json')
+            result = self.download_file(page_url, file_type='json')
             processed_pages += 1
+
+            if result is False:
+                # 실제 에러 발생 시 연속 에러 체크
+                if self.consecutive_error_count >= self.max_consecutive_errors:
+                    logger.error(f"연속 {self.max_consecutive_errors}회 에러 발생으로 수집 중단")
+                    sys.exit(1)
 
             # 진행 상황 출력 간격
             if processed_pages % 50 == 0:
@@ -667,7 +781,11 @@ class SmartIncrementalMirror:
                 logger.info(f"진행: {processed_pages}/{pages_to_fetch}, 다운로드: {self.downloaded_count}, 건너뛰기: {self.skipped_count}, 오류: {self.error_count}, 속도: {rate:.1f} req/sec")
 
             # 서버 부담 완화
-            time.sleep(0.2 if success else 0.8)
+            if result is True:
+                time.sleep(0.2)
+            elif result is False:
+                time.sleep(0.8)
+            # 스킵(None)은 대기 없음
 
         elapsed = time.time() - start_time
         logger.info("\n=== gcd 수집 완료 ===")
@@ -679,21 +797,37 @@ class SmartIncrementalMirror:
 
 def main():
     """메인 함수"""
-    if len(sys.argv) < 3:
-        print("Usage: python3 smart_incremental_mirror.py <base_url> <output_dir> [max_pages] [site_name]")
-        print("  site_name: dalong, bandai-hobby, gundaminfo")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='스마트 증분 웹 미러링 시스템',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+사용 예시:
+  python3 smart_incremental_mirror.py https://example.com ./output 1000 example
+  python3 smart_incremental_mirror.py https://example.com ./output 1000 example -x https://example.com/admin -x https://example.com/api
 
-    base_url = sys.argv[1]
-    output_dir = sys.argv[2]
-    max_pages = int(sys.argv[3]) if len(sys.argv) > 3 else 1000
-    site_name = sys.argv[4]
+지원 사이트: dalong, bandai-hobby, gundaminfo, gcd, bnkrmall
+        '''
+    )
+    parser.add_argument('base_url', help='미러링할 기본 URL')
+    parser.add_argument('output_dir', help='출력 디렉토리')
+    parser.add_argument('max_pages', type=int, nargs='?', default=1000, help='최대 페이지 수 (기본값: 1000)')
+    parser.add_argument('site_name', help='사이트 이름 (dalong, bandai-hobby, gundaminfo, gcd, bnkrmall)')
+    parser.add_argument('-x', '--exclude', action='append', dest='exclude_prefixes', default=[],
+                        metavar='URL_PREFIX', help='제외할 URL prefix (여러 번 사용 가능)')
+
+    args = parser.parse_args()
+
     # 미러링 시스템 초기화
-    mirror = SmartIncrementalMirror(base_url, output_dir, site_name)
+    mirror = SmartIncrementalMirror(
+        args.base_url,
+        args.output_dir,
+        args.site_name,
+        exclude_prefixes=args.exclude_prefixes
+    )
 
     # 미러링 실행
     try:
-        mirror.mirror_site(max_pages)
+        mirror.mirror_site(args.max_pages)
     except KeyboardInterrupt:
         logger.info("사용자에 의해 중단됨")
     except Exception as e:
