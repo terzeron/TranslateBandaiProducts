@@ -22,7 +22,8 @@ used_translation_keys = set()
 def read_translation(translation_file_path: Path) -> dict[str, str]:
     with translation_file_path.open("r", encoding="utf-8") as infile:
         translation_data = json.load(infile)
-    return translation_data
+    # 키를 clean_text로 정규화하여 HTML에서 추출한 상품명과 매칭되도록 함
+    return {clean_text(k): v for k, v in translation_data.items()}
 
 
 def write_translation(translation_file_path: Path, translation_data: dict[str, str]) -> None:
@@ -212,8 +213,9 @@ def make_symbolic_link(link: Path, target: Path, pdf_dir_path: Path, product_num
         return "failed"
 
 
-def print_html(product_number: int, full_korean_name: str) -> None:
-    print(f"<li><a href='{BASE_URL}/pdf/{product_number}.pdf' target='_blank'>{full_korean_name}</a></li>")
+def print_html(product_number: int, full_korean_name: str, korean_name: str, brand: str, scale: str) -> None:
+    print(f"<li data-name='{korean_name}' data-brand='{brand}' data-scale='{scale}'>"
+          f"<a href='{BASE_URL}/pdf/{product_number}.pdf' target='_blank'>{full_korean_name}</a></li>")
 
 
 def process_duplicates(product_name_number_dict: dict[str, int], product_number: int, full_korean_name: str, year: str, pdf_dir_path: Path) -> Optional[Path]:
@@ -246,7 +248,7 @@ def process_product_page_files(detail_dir_path: Path, pdf_dir_path: Path, transl
     st = Stats()
 
     product_name_number_dict = {}
-    list_to_print: list[tuple[int, str]] = []
+    list_to_print: list[tuple[int, str, str, str, str]] = []
     for file_path in detail_dir_path.iterdir():
         if not file_path.is_file():
             print(f"DEBUG: 파일이 아님: {file_path.name}")
@@ -276,7 +278,7 @@ def process_product_page_files(detail_dir_path: Path, pdf_dir_path: Path, transl
                 if deduplicated_link:
                     link = deduplicated_link
 
-                list_to_print.append((product_number, full_korean_name))
+                list_to_print.append((product_number, full_korean_name, escaped_korean_name, brand, scale))
 
                 st.symlink_attempts += 1
                 result = make_symbolic_link(link, target, pdf_dir_path, product_number)
@@ -301,8 +303,8 @@ def process_product_page_files(detail_dir_path: Path, pdf_dir_path: Path, transl
 
 
     if do_print_html:
-        for product_number, full_korean_name in sorted(list_to_print, key=lambda x: x[1]):
-            print_html(product_number, full_korean_name)
+        for product_number, full_korean_name, korean_name, brand, scale in sorted(list_to_print, key=lambda x: x[1]):
+            print_html(product_number, full_korean_name, korean_name, brand, scale)
 
     return st
 
@@ -324,13 +326,156 @@ def main() -> int:
         sys.stderr.write(f"can't find translation data from '{translation_file_path}'\n")
 
     if do_print_html:
-        print("<ul>")
+        print("""<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>반다이 프라모델 목록</title>
+<style>
+  body { font-family: 'Malgun Gothic', sans-serif; margin: 20px; background: #f5f5f5; }
+  .search-box { background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); margin-bottom: 20px; }
+  .search-box label { display: inline-block; margin-right: 8px; font-weight: bold; }
+  .search-box input, .search-box select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; margin-right: 16px; }
+  .search-box input[type=text] { width: 200px; }
+  .search-box input[type=number] { width: 60px; }
+  .search-box button { padding: 6px 16px; border: 1px solid #1a73e8; border-radius: 4px; background: #1a73e8; color: #fff; cursor: pointer; font-size: 14px; }
+  .search-box button:hover { background: #1557b0; }
+  .options { margin-top: 8px; font-size: 0.9em; color: #555; }
+  #count { margin-bottom: 8px; color: #666; }
+  ul { list-style: disc; padding-left: 20px; }
+  li { padding: 2px 0; }
+  li a { color: #1a0dab; text-decoration: none; }
+  li a:hover { text-decoration: underline; }
+  li.hidden { display: none; }
+  mark { background: #fff176; padding: 0; }
+</style>
+</head>
+<body>
+<h1>반다이 프라모델 목록</h1>
+<div class="search-box">
+  <div>
+    <label for="searchName">제품명:</label>
+    <input type="text" id="searchName" placeholder="제품명 검색...">
+    <label for="searchBrand">등급:</label>
+    <input type="text" id="searchBrand" placeholder="예: HG, MG, RG...">
+    <label for="searchScale">스케일:</label>
+    <input type="text" id="searchScale" placeholder="예: 1_144">
+    <button id="searchBtn">검색</button>
+  </div>
+  <div class="options">
+    <label><input type="checkbox" id="fuzzyToggle" checked> 오타 허용 (퍼지 검색)</label>
+    <label style="margin-left:16px;">허용 거리: <input type="number" id="fuzzyThreshold" value="1" min="0" max="5" style="width:50px;"></label>
+  </div>
+</div>
+<div id="count"></div>
+<ul id="productList">""")
 
     # 상품 페이지 파일 처리
     st = process_product_page_files(detail_dir_path, pdf_dir_path, translation_data, do_print_html)
 
     if do_print_html:
-        print("</ul>")
+        print(r"""</ul>
+<script>
+(function() {
+  // Levenshtein distance 계산
+  function levenshtein(a, b) {
+    var m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    var dp = [];
+    for (var i = 0; i <= m; i++) dp[i] = [i];
+    for (var j = 0; j <= n; j++) dp[0][j] = j;
+    for (i = 1; i <= m; i++) {
+      for (j = 1; j <= n; j++) {
+        var cost = a[i-1] === b[j-1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + cost);
+      }
+    }
+    return dp[m][n];
+  }
+
+  // 부분 문자열 퍼지 매칭: 공백 제거 후 슬라이딩 윈도우로 최소 편집 거리 계산
+  function fuzzyContains(target, query, threshold) {
+    target = target.toLowerCase();
+    query = query.toLowerCase();
+    if (query.length === 0) return true;
+    if (target.indexOf(query) !== -1 || removeSpaces(target).indexOf(removeSpaces(query)) !== -1) return true;
+    // 공백 제거 버전으로 퍼지 매칭
+    var t = removeSpaces(target);
+    var q = removeSpaces(query);
+    if (q.length > t.length) return levenshtein(t, q) <= threshold;
+    var minDist = Infinity;
+    for (var i = 0; i <= t.length - q.length; i++) {
+      var sub = t.substring(i, i + q.length);
+      var d = levenshtein(sub, q);
+      if (d < minDist) minDist = d;
+      if (minDist === 0) return true;
+    }
+    return minDist <= threshold;
+  }
+
+  // 공백 제거 유틸
+  function removeSpaces(s) { return s.replace(/\s+/g, ''); }
+
+  // 정확한 부분 문자열 매칭 (공백 무시)
+  function exactContains(target, query) {
+    var t = target.toLowerCase(), q = query.toLowerCase();
+    return t.indexOf(q) !== -1 || removeSpaces(t).indexOf(removeSpaces(q)) !== -1;
+  }
+
+  var items = document.querySelectorAll('#productList li');
+  var nameInput = document.getElementById('searchName');
+  var brandInput = document.getElementById('searchBrand');
+  var scaleInput = document.getElementById('searchScale');
+  var fuzzyToggle = document.getElementById('fuzzyToggle');
+  var fuzzyThreshold = document.getElementById('fuzzyThreshold');
+  var searchBtn = document.getElementById('searchBtn');
+  var countEl = document.getElementById('count');
+
+  function doFilter() {
+    var qName = nameInput.value.trim();
+    var qBrand = brandInput.value.trim();
+    var qScale = scaleInput.value.trim();
+    var useFuzzy = fuzzyToggle.checked;
+    var threshold = parseInt(fuzzyThreshold.value) || 2;
+    var matchFn = useFuzzy
+      ? function(t, q) { return fuzzyContains(t, q, threshold); }
+      : exactContains;
+
+    var shown = 0;
+    for (var i = 0; i < items.length; i++) {
+      var li = items[i];
+      var name = li.getAttribute('data-name') || '';
+      var brand = li.getAttribute('data-brand') || '';
+      var scale = li.getAttribute('data-scale') || '';
+
+      var match = true;
+      if (qName && !matchFn(name, qName)) match = false;
+      if (qBrand && !exactContains(brand, qBrand)) match = false;
+      if (qScale && !exactContains(scale, qScale)) match = false;
+
+      if (match) {
+        li.classList.remove('hidden');
+        shown++;
+      } else {
+        li.classList.add('hidden');
+      }
+    }
+    countEl.textContent = shown + '개 / 전체 ' + items.length + '개';
+  }
+
+  searchBtn.addEventListener('click', doFilter);
+  nameInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doFilter(); });
+  brandInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doFilter(); });
+  scaleInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doFilter(); });
+
+  // 초기 카운트 표시
+  countEl.textContent = items.length + '개 / 전체 ' + items.length + '개';
+})();
+</script>
+</body>
+</html>""")
 
     # 실제 PDF 파일 갯수 계산 (심볼릭링크 제외)
     pdf_files_count = sum(1 for f in pdf_dir_path.iterdir() if f.is_file() and not f.is_symlink() and f.name.endswith('.pdf'))
@@ -353,29 +498,30 @@ def main() -> int:
     # 여러 심볼릭링크가 가리키는 PDF 찾기
     multiple_symlinks = {target: links for target, links in symlink_targets.items() if len(links) > 1}
 
-    # 처리 단계별 통계 출력
-    print("\n=== 처리 단계별 통계 ===")
-    print(f"전체 HTML 파일: {st.total_html_files}개")
-    print(f"유효한 제품번호 파일: {st.valid_product_number_files}개 (감소: {st.total_html_files - st.valid_product_number_files}개)")
-    print(f"제품명 추출 성공: {st.product_name_extracted}개 (감소: {st.valid_product_number_files - st.product_name_extracted}개)")
-    print(f"번역 성공: {st.translation_success}개")
-    print(f"번역 실패 (빈 번역값): {st.translation_empty}개")
-    print(f"번역 실패 (번역 데이터 없음): {st.translation_not_found}개")
-
-    print("\n=== 심볼릭링크 처리 통계 ===")
-    print(f"실제 PDF 파일: {pdf_files_count}개")
-    print(f"심볼릭링크 시도: {st.symlink_attempts}개 (번역 성공과 일치해야 함)")
-    print(f"심볼릭링크 생성 성공: {st.symlink_created}개")
-    print(f"PDF 다운로드 후 생성: {st.symlink_downloaded_and_created}개")
-    print(f"이미 존재하는 심볼릭링크: {st.symlink_already_exists}개")
-    print(f"target PDF 파일 없음 (다운로드 실패): {st.symlink_target_missing}개")
-    print(f"생성 실패 (기타 오류): {st.symlink_creation_failed}개")
-    print(f"심볼릭링크 처리 총합: {st.symlink_created + st.symlink_downloaded_and_created + st.symlink_already_exists + st.symlink_target_missing + st.symlink_creation_failed}개 (시도와 일치해야 함)")
-    print(f"실제 생성된 심볼릭링크: {st.symlink_created + st.symlink_downloaded_and_created}개")
-    print(f"현재 존재하는 총 심볼릭링크: {existing_symlinks_count}개")
-    print(f"여러 심볼릭링크가 가리키는 PDF: {len(multiple_symlinks)}개")
-    print(f"중복 심볼릭링크 총 개수: {sum(len(links) - 1 for links in multiple_symlinks.values())}개")
-    print(f"translating error 출력 예상: {st.translation_empty + st.translation_not_found}개")
+    if not do_print_html:
+        # 처리 단계별 통계 출력
+        print("\n=== 처리 단계별 통계 ===")
+        print(f"전체 HTML 파일: {st.total_html_files}개")
+        print(f"유효한 제품번호 파일: {st.valid_product_number_files}개 (감소: {st.total_html_files - st.valid_product_number_files}개)")
+        print(f"제품명 추출 성공: {st.product_name_extracted}개 (감소: {st.valid_product_number_files - st.product_name_extracted}개)")
+        print(f"번역 성공: {st.translation_success}개")
+        print(f"번역 실패 (빈 번역값): {st.translation_empty}개")
+        print(f"번역 실패 (번역 데이터 없음): {st.translation_not_found}개")
+        
+        print("\n=== 심볼릭링크 처리 통계 ===")
+        print(f"실제 PDF 파일: {pdf_files_count}개")
+        print(f"심볼릭링크 시도: {st.symlink_attempts}개 (번역 성공과 일치해야 함)")
+        print(f"심볼릭링크 생성 성공: {st.symlink_created}개")
+        print(f"PDF 다운로드 후 생성: {st.symlink_downloaded_and_created}개")
+        print(f"이미 존재하는 심볼릭링크: {st.symlink_already_exists}개")
+        print(f"target PDF 파일 없음 (다운로드 실패): {st.symlink_target_missing}개")
+        print(f"생성 실패 (기타 오류): {st.symlink_creation_failed}개")
+        print(f"심볼릭링크 처리 총합: {st.symlink_created + st.symlink_downloaded_and_created + st.symlink_already_exists + st.symlink_target_missing + st.symlink_creation_failed}개 (시도와 일치해야 함)")
+        print(f"실제 생성된 심볼릭링크: {st.symlink_created + st.symlink_downloaded_and_created}개")
+        print(f"현재 존재하는 총 심볼릭링크: {existing_symlinks_count}개")
+        print(f"여러 심볼릭링크가 가리키는 PDF: {len(multiple_symlinks)}개")
+        print(f"중복 심볼릭링크 총 개수: {sum(len(links) - 1 for links in multiple_symlinks.values())}개")
+        print(f"translating error 출력 예상: {st.translation_empty + st.translation_not_found}개")
 
     return 0
 

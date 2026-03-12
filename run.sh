@@ -33,11 +33,11 @@ echo "=== Bandai Manual 데이터 수집 ==="
 #echo "=== 번역 참고 자료 추출 ==="
 #python gemini_agent.py < instruction.md
 if ./convert_bandai_product_ja2ko.py | grep "translating error:" > /dev/null; then
-    (cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | ~/.local/bin/claude -p
+    (cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | ~/.local/bin/claude --dangerously-skip-permissions -p
     #(cat instruction.md; ./convert_bandai_product_ja2ko.py | grep "translating error:") | /bin/codex exec --sandbox=workspace-write
 fi
 
 echo
 echo "=== Bandai Manual 결과 조회 및 HTML 저장 ==="
 ./convert_bandai_product_ja2ko.py 
-./convert_bandai_product_ja2ko.py -h > ~/public_html/xml/bandai.html
+./convert_bandai_product_ja2ko.py -h > ~/public_html/bandai/gundam.html
